@@ -14,6 +14,7 @@ from pdf_book_digitizer.assemble import (
 from pdf_book_digitizer.config import DigitizerConfig
 from pdf_book_digitizer.diffs import build_unified_diff, write_diff
 from pdf_book_digitizer.hard_line_breaks import needs_hard_line_break_fix
+from pdf_book_digitizer.image_inputs import infer_page_number_from_image_path
 from pdf_book_digitizer.models import PageContent
 from pdf_book_digitizer.ocr import OllamaOCRClient
 from pdf_book_digitizer.pdf_render import render_pdf_to_jpgs
@@ -65,6 +66,7 @@ def run_ocr_from_images(
 
     for index, page_image in enumerate(image_paths, start=1):
         output_stem = page_image.stem if preserve_input_names else f"page-{index:04d}"
+        page_number = infer_page_number_from_image_path(page_image, index) if preserve_input_names else index
         fixed_output_path = _build_output_path(fixed_dir, output_stem, output_json)
         raw_output_path = _build_output_path(raw_dir, output_stem, output_json)
         diff_output_path = diffs_dir / f"{output_stem}.diff"
@@ -72,11 +74,11 @@ def run_ocr_from_images(
         if preserve_input_names and raw_dir.exists() and fixed_dir.exists() and diffs_dir.exists():
             if raw_output_path.exists() and fixed_output_path.exists() and diff_output_path.exists():
                 print(f"Skipping {output_stem}; found existing raw, fixed, and diff outputs")
-                assembled_pages.append(_read_page_output(fixed_output_path, index, output_json))
+                assembled_pages.append(_read_page_output(fixed_output_path, page_number, output_json))
                 output_stems.append(output_stem)
                 continue
 
-        page = client.ocr_page(page_image, page_number=index, language_hint=language_hint)
+        page = client.ocr_page(page_image, page_number=page_number, language_hint=language_hint)
         original_text = page.body_markdown
         fixed_text = fix_ocr_text(original_text) if llm_refix else original_text
         raw_page = replace(page, body_markdown=original_text)
@@ -147,13 +149,13 @@ def _rerun_hard_line_break_fix_passes(
     for pass_number in range(INITIAL_RECHECK_PASS_NUMBER, max_passes + INITIAL_RECHECK_PASS_NUMBER):
         print(f"Starting hard-line-break recheck pass {pass_number}")
         flagged_pages = 0
-        for index, (page, output_stem) in enumerate(zip(assembled_pages, output_stems, strict=True), start=1):
+        for page, output_stem in zip(assembled_pages, output_stems, strict=True):
             fixed_output_path = _build_output_path(fixed_dir, output_stem, output_json)
             if not fixed_output_path.exists():
                 print(f"Skipping hard-line-break recheck for {output_stem}; missing fixed output")
                 continue
 
-            stored_page = _read_page_output(fixed_output_path, index, output_json)
+            stored_page = _read_page_output(fixed_output_path, page.page_number, output_json)
             if not needs_hard_line_break_fix(stored_page.body_markdown.splitlines()):
                 print(f"No hard-line-break refix needed for {output_stem}; pass {pass_number}")
                 continue
