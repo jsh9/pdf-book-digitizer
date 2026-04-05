@@ -66,11 +66,12 @@ pip install -e .
 
 ## Endpoints
 
-This tool exposes three command-line endpoints:
+This tool exposes four command-line endpoints:
 
 - `digitize-book`: render a PDF into page images, OCR the pages, run cleanup/refix passes, and assemble `book.md` plus `book.html`
 - `digitize-images`: OCR an existing folder of page images, run cleanup/refix passes, and assemble `book.md` plus `book.html`
 - `extract-pdf-pages`: only extract one JPG per PDF page, without OCR
+- `inspect-ocr-pages`: open a local browser editor for page images and per-page OCR Markdown
 
 ## Run
 
@@ -125,6 +126,57 @@ digitize-images /path/to/page-images --output-json
 extract-pdf-pages /path/to/book.pdf \
   --output-dir pages \
   --dpi 300
+```
+
+`inspect-ocr-pages`
+
+```bash
+inspect-ocr-pages \
+  --images-dir /path/to/pages \
+  --markdown-dir /path/to/output/ocr/fixed
+```
+
+This starts a local browser-based editor that shows one page image beside its matching Markdown file, matched by filename stem such as `page-0001.jpg` and `page-0001.md`.
+
+Editor behavior:
+
+- the page image is shown on the left and the Markdown is shown in an editable text area on the right
+- the image panel starts sized to show the page image at browser-height scale and can be widened or narrowed by dragging its right edge
+- `Save` writes the edited Markdown to a sibling folder named `manually-fixed/`
+- `Cmd+S` on macOS, or `Ctrl+S` elsewhere, triggers `Save`
+- `Previous Page` moves to the previous page without writing any files
+- `Next Page Without Saving` advances to the next page without writing any files
+- `Save & Next` saves first and then advances to the next page
+- `Cmd+Shift+PageUp` on macOS, or `Ctrl+Shift+PageUp` elsewhere, triggers `Previous Page`
+- `Cmd+Shift+PageDown` on macOS, or `Ctrl+Shift+PageDown` elsewhere, triggers `Next Page Without Saving`
+- `Cmd+Shift+Enter` on macOS, or `Ctrl+Shift+Enter` elsewhere, triggers `Next Page`
+- `End of page is end of paragraph` is a page-level toggle, off by default
+- `Hard page break` is a page-level toggle, off by default
+- `Cmd+Shift+P` on macOS, or `Ctrl+Shift+P` elsewhere, toggles `End of page is end of paragraph`
+- `Cmd+Shift+L` on macOS, or `Ctrl+Shift+L` elsewhere, toggles `Hard page break`
+- `Jump to` uses the numeric page index parsed from the filename stem, such as `26` for `page-0026.jpg`
+- `Go to next uninspected page` jumps to the next page that has not yet been manually inspected, using the same resumability logic as startup
+- `Mark end of chapter` toggles the current page as a chapter-ending page and saves that marker immediately
+- chapter-ending pages are saved to `chapter-end-pages.json` in the parent folder of the provided Markdown directory
+- end-of-page paragraph flags are saved to `end-of-page-is-end-of-paragraph.json` in the parent folder of the provided Markdown directory
+- hard page break flags are saved to `hard-page-break.json` in the parent folder of the provided Markdown directory and pre-populated to `false` for every page when the inspector starts
+- diffs between the original Markdown and the edited Markdown are written to a sibling folder named `manually-fixed-diffs/`
+- if both `manually-fixed/` and `manually-fixed-diffs/` already exist and contain the same page stems, the editor starts on the first page that has not yet been manually inspected
+
+Example output layout after using the editor:
+
+```text
+output/
+  ocr/
+    chapter-end-pages.json
+    end-of-page-is-end-of-paragraph.json
+    hard-page-break.json
+    fixed/
+      page-0001.md
+    manually-fixed/
+      page-0001.md
+    manually-fixed-diffs/
+      page-0001.diff
 ```
 
 OCR execution shells out to the working CLI form directly:
