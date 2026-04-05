@@ -40,6 +40,59 @@ def run_pipeline(config: DigitizerConfig) -> None:
     )
 
 
+def fix_raw_ocr_results(
+    output_dir: Path,
+    unwrap_text: bool = True,
+    model: str = "qwen3.5:9b",
+) -> None:
+    ocr_dir = output_dir / "ocr"
+    raw_dir = ocr_dir / "raw"
+    fixed_dir = ocr_dir / "fixed"
+    diffs_dir = ocr_dir / "diff"
+
+    raw_paths, output_json = _collect_raw_page_paths(raw_dir)
+    fixed_dir.mkdir(parents=True, exist_ok=True)
+    diffs_dir.mkdir(parents=True, exist_ok=True)
+
+    assembled_pages: list[PageContent] = []
+    output_stems: list[str] = []
+
+    for index, raw_path in enumerate(raw_paths, start=1):
+        output_stem = raw_path.stem
+        page_number = infer_page_number_from_image_path(raw_path, index)
+        raw_page = _read_page_output(raw_path, page_number, output_json)
+        original_text = raw_page.body_markdown
+        fixed_text = fix_ocr_text(original_text, model=model)
+        fixed_page = replace(raw_page, body_markdown=fixed_text)
+        fixed_output_path = _build_output_path(fixed_dir, output_stem, output_json)
+        diff_output_path = diffs_dir / f"{output_stem}.diff"
+
+        _write_page_output(fixed_page, fixed_output_path, output_json)
+        diff_text = build_unified_diff(original_text, fixed_text, output_stem)
+        write_diff(diff_text, diff_output_path)
+        print(diff_text if diff_text else f"No fix diff for {output_stem}")
+
+        assembled_page = replace(raw_page, body_markdown=fixed_text)
+        if unwrap_text:
+            assembled_page.body_markdown = unwrap_ocr_text(assembled_page.body_markdown)
+        assembled_pages.append(assembled_page)
+        output_stems.append(output_stem)
+
+    _rerun_hard_line_break_fix_passes(
+        assembled_pages=assembled_pages,
+        output_stems=output_stems,
+        fixed_dir=fixed_dir,
+        diffs_dir=diffs_dir,
+        output_json=output_json,
+        unwrap_text=unwrap_text,
+        max_passes=1,
+        model=model,
+    )
+
+    assemble_markdown_document(assembled_pages, output_dir / "book.md")
+    assemble_html_document(assembled_pages, output_dir / "book.html")
+
+
 def run_ocr_from_images(
     image_paths: list[Path],
     output_dir: Path,
@@ -106,6 +159,7 @@ def run_ocr_from_images(
             output_json=output_json,
             unwrap_text=unwrap_text,
             max_passes=1,
+            model="qwen3.5:9b",
         )
     else:
         print("Skipping hard-line-break recheck passes because LLM refix is disabled")
@@ -133,6 +187,24 @@ def _read_page_output(input_path: Path, page_number: int, output_json: bool) -> 
     return read_page_markdown(input_path, page_number)
 
 
+def _collect_raw_page_paths(raw_dir: Path) -> tuple[list[Path], bool]:
+    if not raw_dir.exists():
+        raise FileNotFoundError(f"Raw OCR directory does not exist: {raw_dir}")
+    if not raw_dir.is_dir():
+        raise NotADirectoryError(f"Raw OCR path is not a directory: {raw_dir}")
+
+    json_paths = sorted(path for path in raw_dir.iterdir() if path.is_file() and path.suffix.lower() == ".json")
+    markdown_paths = sorted(path for path in raw_dir.iterdir() if path.is_file() and path.suffix.lower() == ".md")
+
+    if json_paths and markdown_paths:
+        raise ValueError(f"Raw OCR directory contains both Markdown and JSON page artifacts: {raw_dir}")
+    if json_paths:
+        return json_paths, True
+    if markdown_paths:
+        return markdown_paths, False
+    raise ValueError(f"No raw OCR page artifacts found in {raw_dir}")
+
+
 def _rerun_hard_line_break_fix_passes(
     assembled_pages: list[PageContent],
     output_stems: list[str],
@@ -141,6 +213,7 @@ def _rerun_hard_line_break_fix_passes(
     output_json: bool,
     unwrap_text: bool,
     max_passes: int,
+    model: str,
 ) -> None:
     print(f"Starting hard-line-break recheck passes: {max_passes} total")
     # Pass 1 is the initial OCR cleanup that already produced `<stem>.diff`.
@@ -162,7 +235,7 @@ def _rerun_hard_line_break_fix_passes(
 
             flagged_pages += 1
             print(f"Re-fixing {output_stem} for hard line breaks; pass {pass_number}")
-            refixed_text = fix_ocr_text(stored_page.body_markdown, model="qwen3.5:9b")
+            refixed_text = fix_ocr_text(stored_page.body_markdown, model=model)
             print(f"Old content for {output_stem}; pass {pass_number}:\n{stored_page.body_markdown}")
             print(f"Fixed content for {output_stem}; pass {pass_number}:\n{refixed_text}")
             diff_text = build_unified_diff(stored_page.body_markdown, refixed_text, f"{output_stem}-{pass_number}")

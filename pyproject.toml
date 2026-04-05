@@ -23,6 +23,7 @@ dev = [
 digitize-book = "pdf_book_digitizer.cli:main"
 digitize-images = "pdf_book_digitizer.cli_images:main"
 extract-pdf-pages = "pdf_book_digitizer.cli_extract_pages:main"
+fix-raw-ocr-results = "pdf_book_digitizer.cli_fix_raw_ocr_results:main"
 inspect-ocr-pages = "pdf_book_digitizer.manual_editor:main"
 
 [tool.setuptools]

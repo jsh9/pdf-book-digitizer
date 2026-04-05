@@ -66,11 +66,12 @@ pip install -e .
 
 ## Endpoints
 
-This tool exposes four command-line endpoints:
+This tool exposes five command-line endpoints:
 
 - `digitize-book`: render a PDF into page images, OCR the pages, run cleanup/refix passes, and assemble `book.md` plus `book.html`
 - `digitize-images`: OCR an existing folder of page images, run cleanup/refix passes, and assemble `book.md` plus `book.html`
 - `extract-pdf-pages`: only extract one JPG per PDF page, without OCR
+- `fix-raw-ocr-results`: run the cleanup/refix stage on existing `ocr/raw` page artifacts and rebuild `book.md` plus `book.html`
 - `inspect-ocr-pages`: open a local browser editor for page images and per-page OCR Markdown
 
 ## Run
@@ -127,6 +128,14 @@ extract-pdf-pages /path/to/book.pdf \
   --output-dir pages \
   --dpi 300
 ```
+
+`fix-raw-ocr-results`
+
+```bash
+fix-raw-ocr-results output
+```
+
+This reads existing per-page raw OCR artifacts from `output/ocr/raw/`, sends each page body through the cleanup model, rewrites `output/ocr/fixed/` and `output/ocr/diff/`, runs the same hard-line-break recheck pass used by the main OCR pipeline, and rebuilds `output/book.md` plus `output/book.html`.
 
 `inspect-ocr-pages`
 
