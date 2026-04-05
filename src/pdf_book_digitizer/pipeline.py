@@ -18,7 +18,7 @@ from pdf_book_digitizer.image_inputs import infer_page_number_from_image_path
 from pdf_book_digitizer.models import PageContent
 from pdf_book_digitizer.ocr import OllamaOCRClient
 from pdf_book_digitizer.pdf_render import render_pdf_to_jpgs
-from pdf_book_digitizer.text_fix import fix_ocr_text
+from pdf_book_digitizer.text_fix import fix_ocr_text_with_LLM
 from pdf_book_digitizer.text_cleanup import unwrap_ocr_text
 
 
@@ -62,19 +62,19 @@ def fix_raw_ocr_results(
         page_number = infer_page_number_from_image_path(raw_path, index)
         raw_page = _read_page_output(raw_path, page_number, output_json)
         original_text = raw_page.body_markdown
-        fixed_text = fix_ocr_text(original_text, model=model)
-        fixed_page = replace(raw_page, body_markdown=fixed_text)
+        fixed_text = fix_ocr_text_with_LLM(original_text, model=model)
         fixed_output_path = _build_output_path(fixed_dir, output_stem, output_json)
         diff_output_path = diffs_dir / f"{output_stem}.diff"
-
-        _write_page_output(fixed_page, fixed_output_path, output_json)
-        diff_text = build_unified_diff(original_text, fixed_text, output_stem)
-        write_diff(diff_text, diff_output_path)
-        print(diff_text if diff_text else f"No fix diff for {output_stem}")
 
         assembled_page = replace(raw_page, body_markdown=fixed_text)
         if unwrap_text:
             assembled_page.body_markdown = unwrap_ocr_text(assembled_page.body_markdown)
+
+        _write_page_output(assembled_page, fixed_output_path, output_json)
+        diff_text = build_unified_diff(original_text, assembled_page.body_markdown, output_stem)
+        write_diff(diff_text, diff_output_path)
+        print(diff_text if diff_text else f"No fix diff for {output_stem}")
+
         assembled_pages.append(assembled_page)
         output_stems.append(output_stem)
 
@@ -87,6 +87,7 @@ def fix_raw_ocr_results(
         unwrap_text=unwrap_text,
         max_passes=1,
         model=model,
+        write_unwrapped_fixed_output=True,
     )
 
     assemble_markdown_document(assembled_pages, output_dir / "book.md")
@@ -133,7 +134,7 @@ def run_ocr_from_images(
 
         page = client.ocr_page(page_image, page_number=page_number, language_hint=language_hint)
         original_text = page.body_markdown
-        fixed_text = fix_ocr_text(original_text) if llm_refix else original_text
+        fixed_text = fix_ocr_text_with_LLM(original_text) if llm_refix else original_text
         raw_page = replace(page, body_markdown=original_text)
         fixed_page = replace(page, body_markdown=fixed_text)
         _write_page_output(raw_page, raw_output_path, output_json)
@@ -160,6 +161,7 @@ def run_ocr_from_images(
             unwrap_text=unwrap_text,
             max_passes=1,
             model="qwen3.5:9b",
+            write_unwrapped_fixed_output=False,
         )
     else:
         print("Skipping hard-line-break recheck passes because LLM refix is disabled")
@@ -214,6 +216,7 @@ def _rerun_hard_line_break_fix_passes(
     unwrap_text: bool,
     max_passes: int,
     model: str,
+    write_unwrapped_fixed_output: bool,
 ) -> None:
     print(f"Starting hard-line-break recheck passes: {max_passes} total")
     # Pass 1 is the initial OCR cleanup that already produced `<stem>.diff`.
@@ -235,19 +238,21 @@ def _rerun_hard_line_break_fix_passes(
 
             flagged_pages += 1
             print(f"Re-fixing {output_stem} for hard line breaks; pass {pass_number}")
-            refixed_text = fix_ocr_text(stored_page.body_markdown, model=model)
+            refixed_text = fix_ocr_text_with_LLM(stored_page.body_markdown, model=model)
             print(f"Old content for {output_stem}; pass {pass_number}:\n{stored_page.body_markdown}")
             print(f"Fixed content for {output_stem}; pass {pass_number}:\n{refixed_text}")
-            diff_text = build_unified_diff(stored_page.body_markdown, refixed_text, f"{output_stem}-{pass_number}")
+            final_text = refixed_text
+            if unwrap_text:
+                final_text = unwrap_ocr_text(final_text)
+
+            diff_text = build_unified_diff(stored_page.body_markdown, final_text, f"{output_stem}-{pass_number}")
             write_diff(diff_text, diffs_dir / f"{output_stem}-{pass_number}.diff")
             print(diff_text if diff_text else f"No refix diff for {output_stem}; pass {pass_number}")
 
-            stored_page.body_markdown = refixed_text
+            stored_page.body_markdown = final_text if write_unwrapped_fixed_output else refixed_text
             _write_page_output(stored_page, fixed_output_path, output_json)
 
-            page.body_markdown = refixed_text
-            if unwrap_text:
-                page.body_markdown = unwrap_ocr_text(page.body_markdown)
+            page.body_markdown = final_text
 
         if flagged_pages == 0:
             print(f"Completed hard-line-break recheck pass {pass_number}; no pages needed refix")

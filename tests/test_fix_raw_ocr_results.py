@@ -16,8 +16,8 @@ def test_fix_raw_ocr_results_updates_markdown_outputs(tmp_path: Path, monkeypatc
     (raw_dir / "leaf.md").write_text("gamma\ndelta\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "pdf_book_digitizer.pipeline.fix_ocr_text",
-        lambda text, model="qwen3.5:9b": text.replace("\n", " ").strip().upper(),
+        "pdf_book_digitizer.pipeline.fix_ocr_text_with_LLM",
+        lambda text, model="qwen3.5:9b": text.strip().upper(),
     )
     monkeypatch.setattr("pdf_book_digitizer.pipeline.needs_hard_line_break_fix", lambda lines: False)
 
@@ -48,14 +48,14 @@ def test_fix_raw_ocr_results_updates_json_outputs_and_reruns_flagged_pages(tmp_p
         raw_dir / "page-0007.json",
     )
 
-    def fake_fix_ocr_text(text: str, model: str = "qwen3.5:9b") -> str:
+    def fake_fix_ocr_text_with_LLM(text: str, model: str = "qwen3.5:9b") -> str:
         if text == "alpha\nbeta":
             return "alpha beta"
         if text == "alpha beta":
             return "ALPHA BETA"
         return text
 
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.fix_ocr_text", fake_fix_ocr_text)
+    monkeypatch.setattr("pdf_book_digitizer.pipeline.fix_ocr_text_with_LLM", fake_fix_ocr_text_with_LLM)
     monkeypatch.setattr(
         "pdf_book_digitizer.pipeline.needs_hard_line_break_fix",
         lambda lines: lines == ["alpha beta"],
@@ -77,3 +77,31 @@ def test_fix_raw_ocr_results_updates_json_outputs_and_reruns_flagged_pages(tmp_p
 
     payload = json.loads((output_dir / "ocr" / "fixed" / "page-0007.json").read_text(encoding="utf-8"))
     assert payload["running_footer"] == "Footer text"
+
+
+def test_fix_raw_ocr_results_keeps_unwrapped_fixed_output_after_rerun(tmp_path: Path, monkeypatch) -> None:
+    output_dir = tmp_path / "output"
+    raw_dir = output_dir / "ocr" / "raw"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "page-0001.md").write_text("alpha\nbeta\n", encoding="utf-8")
+
+    def fake_fix_ocr_text_with_LLM(text: str, model: str = "qwen3.5:9b") -> str:
+        if text == "alpha\nbeta":
+            return "alpha beta"
+        if text == "alpha beta":
+            return "ALPHA\nBETA"
+        return text
+
+    monkeypatch.setattr("pdf_book_digitizer.pipeline.fix_ocr_text_with_LLM", fake_fix_ocr_text_with_LLM)
+    monkeypatch.setattr(
+        "pdf_book_digitizer.pipeline.needs_hard_line_break_fix",
+        lambda lines: lines == ["alpha beta"],
+    )
+
+    fix_raw_ocr_results(output_dir, unwrap_text=True)
+
+    fixed_page = read_page_markdown(output_dir / "ocr" / "fixed" / "page-0001.md", page_number=1)
+    assert fixed_page.body_markdown == "ALPHA BETA"
+
+    rerun_diff = (output_dir / "ocr" / "diff" / "page-0001-2.diff").read_text(encoding="utf-8")
+    assert "ALPHA BETA" in rerun_diff
