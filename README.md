@@ -86,6 +86,7 @@ digitize-book /path/to/book.pdf \
 ```
 
 If your local Ollama model name is not literally `glm-ocr`, pass the exact installed model tag with `--model`.
+For `digitize-book`, `--output-dir` is the parent output folder. The command creates and writes OCR artifacts under `OUTPUT_DIR/ocr/`.
 
 `digitize-images`
 
@@ -96,6 +97,7 @@ digitize-images /path/to/page-images \
 ```
 
 When using `digitize-images`, the per-page OCR output filenames match the input image filenames. For example, `001-cover.jpg` becomes `ocr/raw/001-cover.md` and `ocr/fixed/001-cover.md` by default, or `.json` files with `--output-json`.
+For `digitize-images`, `--output-dir` is also the parent output folder. The command writes OCR artifacts under `OUTPUT_DIR/ocr/`, and reruns look for existing files there.
 When the image filename contains a trailing number such as `page-0026.jpg`, that number is also used as the displayed page number in `book.md` and `book.html`.
 When rerunning `digitize-images`, a page is skipped if matching files already exist in all three locations: `ocr/raw/`, `ocr/fixed/`, and `ocr/diff/`.
 When a page is skipped during OCR or PDF page-image extraction, the pipeline prints a skip message to stdout.

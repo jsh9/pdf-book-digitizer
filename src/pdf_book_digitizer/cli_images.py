@@ -10,7 +10,12 @@ from pdf_book_digitizer.pipeline import run_ocr_from_images
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OCR a folder of page images into per-page JSON and book HTML.")
     parser.add_argument("images_dir", type=Path, help="Directory containing page images to OCR.")
-    parser.add_argument("--output-dir", type=Path, default=Path("output"), help="Directory for generated assets.")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated assets. The command reads from and writes to an `ocr/` subfolder under this directory.",
+    )
     parser.add_argument("--model", default="glm-ocr", help="Ollama model name to use for OCR.")
     parser.add_argument("--language-hint", default="", help="Optional language hint to include in the OCR prompt.")
     parser.add_argument(

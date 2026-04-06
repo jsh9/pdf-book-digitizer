@@ -10,7 +10,12 @@ from pdf_book_digitizer.pipeline import run_pipeline
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Digitize a scanned PDF book into OCR text and extracted images.")
     parser.add_argument("input_pdf", type=Path, help="Path to the source PDF file.")
-    parser.add_argument("--output-dir", type=Path, default=Path("output"), help="Directory for generated assets.")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated assets. An `ocr/` subfolder will be created under this directory.",
+    )
     parser.add_argument("--model", default="glm-ocr", help="Ollama model name to use for OCR.")
     parser.add_argument("--dpi", type=int, default=300, help="Rasterization DPI.")
     parser.add_argument(

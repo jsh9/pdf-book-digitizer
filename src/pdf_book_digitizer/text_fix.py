@@ -5,7 +5,7 @@ import re
 from ollama import ResponseError, chat
 
 
-FIX_MODEL = "qwen3.5:9b"
+FIX_MODEL = "qwen3.5:27b"
 MAX_FIX_ATTEMPTS = 3
 ANSI_ESCAPE_CODE_PATTERN = re.compile(r"\x1B\[[0-9;]*[JKmsu]")
 
