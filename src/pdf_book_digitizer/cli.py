@@ -41,6 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Unwrap OCR text by joining hard-wrapped lines and using single newlines between paragraphs.",
     )
     parser.add_argument(
+        "--llm-fix",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run an LLM cleanup pass on raw OCR text immediately after OCR.",
+    )
+    parser.add_argument(
         "--output-json",
         action="store_true",
         help="Write per-page OCR results as JSON files instead of Markdown.",
@@ -48,8 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--llm-refix",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Run LLM-based cleanup and hard-line-break re-fix passes after OCR.",
+        default=False,
+        help="Run the later hard-line-break re-fix pass after the initial OCR output is written.",
     )
     return parser
 
@@ -67,6 +73,7 @@ def main() -> None:
         language_hint=args.language_hint,
         unwrap_text=args.unwrap_text,
         output_json=args.output_json,
+        llm_fix=args.llm_fix,
         llm_refix=args.llm_refix,
     )
     run_pipeline(config)
