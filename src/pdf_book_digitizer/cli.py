@@ -8,7 +8,10 @@ from pdf_book_digitizer.pipeline import run_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Digitize a scanned PDF book into OCR text and extracted images.")
+    parser = argparse.ArgumentParser(
+        description="Digitize a scanned PDF book into OCR text and extracted images.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("input_pdf", type=Path, help="Path to the source PDF file.")
     parser.add_argument(
         "--output-dir",

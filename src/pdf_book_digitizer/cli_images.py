@@ -8,7 +8,10 @@ from pdf_book_digitizer.pipeline import run_ocr_from_images
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="OCR a folder of page images into per-page JSON and book HTML.")
+    parser = argparse.ArgumentParser(
+        description="OCR a folder of page images into per-page JSON and book HTML.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("images_dir", type=Path, help="Directory containing page images to OCR.")
     parser.add_argument(
         "--output-dir",

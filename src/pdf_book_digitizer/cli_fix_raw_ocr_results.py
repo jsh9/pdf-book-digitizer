@@ -9,7 +9,8 @@ from pdf_book_digitizer.text_fix import FIX_MODEL
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the OCR cleanup and hard-line-break re-fix passes on existing raw OCR page artifacts."
+        description="Run the OCR cleanup and hard-line-break re-fix passes on existing raw OCR page artifacts.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "output_dir",
