@@ -82,7 +82,7 @@ Current validated checks used in this repo:
 
 ```bash
 python3 -m compileall src tests
-pytest -q tests/test_pipeline.py tests/test_ocr.py tests/test_hard_line_breaks.py
+pytest -q tests/test_pipeline.py tests/test_ocr.py tests/test_manual_editor.py
 ```
 
 ## Known Constraints

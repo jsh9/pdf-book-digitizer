@@ -13,17 +13,7 @@ DEESEEK_OCR_PROMPT = "<|grounding|>Convert the document to markdown."
 class OllamaOCRClient:
     def ocr_page(self, image_path: Path, page_number: int) -> PageContent:
         body_text = self._run_ocr(image_path=image_path).strip()
-        return PageContent(
-            page_number=page_number,
-            body_markdown=body_text,
-            running_header="",
-            running_footer="",
-            printed_page_number="",
-            images=[],
-        )
-
-    def describe_figures(self, image_path: Path) -> str:
-        return self._run_ocr(image_path=image_path).strip()
+        return PageContent(page_number=page_number, body_markdown=body_text)
 
     def _run_ocr(self, image_path: Path) -> str:
         command = [
