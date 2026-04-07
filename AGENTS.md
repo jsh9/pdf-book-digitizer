@@ -13,8 +13,8 @@ This project digitizes scanned or poorly OCRed books into:
 
 Primary user flows:
 
-- `digitize-book`: PDF -> page JPGs -> OCR -> cleanup -> assembly
-- `digitize-images`: existing page images -> OCR -> cleanup -> assembly
+- `digitize-book`: PDF -> page JPGs -> OCR -> optional cleanup -> assembly
+- `digitize-images`: existing page images -> OCR -> optional cleanup -> assembly
 - `extract-pdf-pages`: PDF -> page JPGs only
 
 ## Current Output Layout
@@ -35,7 +35,7 @@ output/
 Per-page OCR artifacts:
 
 - `ocr/raw/`: text immediately after OCR
-- `ocr/fixed/`: text after the initial LLM cleanup pass
+- `ocr/fixed/`: text after the initial LLM cleanup pass, or identical to raw when `--no-llm-fix` is used
 - `ocr/diff/`: diff between raw and fixed, plus optional `-2` diff from the later hard-line-break re-fix pass
 
 ## OCR And Cleanup Pipeline
@@ -49,15 +49,19 @@ OCR:
 
 Initial cleanup:
 
-- cleanup model is currently `qwen3.5:9b`
+- cleanup model comes from `text_fix.py` (`FIX_MODEL`)
 - cleanup runs through the Ollama Python client in `text_fix.py`
 - only `response.message.content` is used
+- shared CLI flag: `--llm-fix` / `--no-llm-fix`
+- default: enabled
 
 Hard-line-break recheck:
 
-- after initial OCR + cleanup, fixed files are scanned with `needs_hard_line_break_fix()`
-- if a page is flagged, one additional re-fix pass is run with `qwen3.5:9b`
+- fixed files are scanned with `needs_hard_line_break_fix()` only when `--llm-refix` is enabled
+- if a page is flagged, one additional re-fix pass is run with the same cleanup model from `text_fix.py`
 - that follow-up diff is saved as `<stem>-2.diff`
+- shared CLI flag: `--llm-refix` / `--no-llm-refix`
+- default: disabled
 
 Unwrapping:
 
@@ -71,14 +75,20 @@ Shared flags on `digitize-book` and `digitize-images`:
 - `--model`: OCR model, default `glm-ocr`
 - `--unwrap-text` / `--no-unwrap-text`
 - `--output-json`: write per-page artifacts as JSON instead of Markdown
-- `--llm-refix` / `--no-llm-refix`: enable or disable all LLM-based cleanup/refix passes
+- `--llm-fix` / `--no-llm-fix`: enable or disable the initial post-OCR cleanup pass
+- `--llm-refix` / `--no-llm-refix`: enable or disable the later hard-line-break re-fix pass
+
+Behavior of `--no-llm-fix`:
+
+- skips the initial cleanup pass
+- skips the later hard-line-break re-fix pass, even if `--llm-refix` is set
+- still writes `raw/`, `fixed/`, and `diff/`
+- `fixed/` becomes identical to `raw/`
 
 Behavior of `--no-llm-refix`:
 
-- skips the initial cleanup pass
 - skips the later hard-line-break re-fix pass
-- still writes `raw/`, `fixed/`, and `diff/`
-- `fixed/` becomes identical to `raw/`
+- does not affect the initial cleanup pass
 
 ## Resumability
 

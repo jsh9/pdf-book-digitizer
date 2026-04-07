@@ -1289,7 +1289,8 @@ def parse_page_index(path: str, prefix: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Launch a browser-based editor for page images and per-page OCR Markdown."
+        description="Launch a browser-based editor for page images and per-page OCR Markdown.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--images-dir", type=Path, required=True, help="Directory containing one image per page.")
     parser.add_argument(

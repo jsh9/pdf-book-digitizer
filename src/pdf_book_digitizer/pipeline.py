@@ -18,7 +18,7 @@ from pdf_book_digitizer.image_inputs import infer_page_number_from_image_path
 from pdf_book_digitizer.models import PageContent
 from pdf_book_digitizer.ocr import OllamaOCRClient
 from pdf_book_digitizer.pdf_render import render_pdf_to_jpgs
-from pdf_book_digitizer.text_fix import fix_ocr_text_with_LLM
+from pdf_book_digitizer.text_fix import FIX_MODEL, fix_ocr_text_with_LLM
 from pdf_book_digitizer.text_cleanup import unwrap_ocr_text
 
 
@@ -35,6 +35,7 @@ def run_pipeline(config: DigitizerConfig) -> None:
         language_hint=config.language_hint,
         unwrap_text=config.unwrap_text,
         output_json=config.output_json,
+        llm_fix=config.llm_fix,
         llm_refix=config.llm_refix,
         preserve_input_names=False,
     )
@@ -43,7 +44,7 @@ def run_pipeline(config: DigitizerConfig) -> None:
 def fix_raw_ocr_results(
     output_dir: Path,
     unwrap_text: bool = True,
-    model: str = "qwen3.5:9b",
+    model: str = FIX_MODEL,
 ) -> None:
     ocr_dir = output_dir / "ocr"
     raw_dir = ocr_dir / "raw"
@@ -84,6 +85,7 @@ def fix_raw_ocr_results(
         fixed_dir=fixed_dir,
         diffs_dir=diffs_dir,
         output_json=output_json,
+        llm_fix=True,
         unwrap_text=unwrap_text,
         max_passes=1,
         model=model,
@@ -101,7 +103,8 @@ def run_ocr_from_images(
     language_hint: str = "",
     unwrap_text: bool = True,
     output_json: bool = False,
-    llm_refix: bool = True,
+    llm_fix: bool = True,
+    llm_refix: bool = False,
     preserve_input_names: bool = True,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -134,35 +137,38 @@ def run_ocr_from_images(
 
         page = client.ocr_page(page_image, page_number=page_number, language_hint=language_hint)
         original_text = page.body_markdown
-        fixed_text = fix_ocr_text_with_LLM(original_text) if llm_refix else original_text
+        fixed_text = fix_ocr_text_with_LLM(original_text) if llm_fix else original_text
         raw_page = replace(page, body_markdown=original_text)
         fixed_page = replace(page, body_markdown=fixed_text)
         _write_page_output(raw_page, raw_output_path, output_json)
         _write_page_output(fixed_page, fixed_output_path, output_json)
         diff_text = build_unified_diff(original_text, fixed_text, output_stem)
         write_diff(diff_text, diff_output_path)
-        if llm_refix:
+        if llm_fix:
             print(diff_text if diff_text else f"No fix diff for {output_stem}")
         else:
-            print(f"Skipping LLM refix for {output_stem}; writing raw text as fixed output")
+            print(f"Skipping LLM fix for {output_stem}; writing raw text as fixed output")
         page.body_markdown = fixed_text
         if unwrap_text:
             page.body_markdown = unwrap_ocr_text(page.body_markdown)
         assembled_pages.append(page)
         output_stems.append(output_stem)
 
-    if llm_refix:
+    if llm_fix and llm_refix:
         _rerun_hard_line_break_fix_passes(
             assembled_pages=assembled_pages,
             output_stems=output_stems,
             fixed_dir=fixed_dir,
             diffs_dir=diffs_dir,
             output_json=output_json,
+            llm_fix=llm_fix,
             unwrap_text=unwrap_text,
             max_passes=1,
-            model="qwen3.5:9b",
+            model=FIX_MODEL,
             write_unwrapped_fixed_output=False,
         )
+    elif llm_refix:
+        print("Skipping hard-line-break recheck passes because LLM fix is disabled")
     else:
         print("Skipping hard-line-break recheck passes because LLM refix is disabled")
 
@@ -213,11 +219,16 @@ def _rerun_hard_line_break_fix_passes(
     fixed_dir: Path,
     diffs_dir: Path,
     output_json: bool,
+    llm_fix: bool,
     unwrap_text: bool,
     max_passes: int,
     model: str,
     write_unwrapped_fixed_output: bool,
 ) -> None:
+    if not llm_fix:
+        print("Skipping hard-line-break recheck passes because LLM fix is disabled")
+        return
+
     print(f"Starting hard-line-break recheck passes: {max_passes} total")
     # Pass 1 is the initial OCR cleanup that already produced `<stem>.diff`.
     # The follow-up hard-line-break pass therefore starts at pass 2 and writes

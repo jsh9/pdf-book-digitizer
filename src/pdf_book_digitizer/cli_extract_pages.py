@@ -7,7 +7,10 @@ from pdf_book_digitizer.pdf_render import render_pdf_to_jpgs
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Extract one JPG image per page from a PDF.")
+    parser = argparse.ArgumentParser(
+        description="Extract one JPG image per page from a PDF.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("input_pdf", type=Path, help="Path to the source PDF file.")
     parser.add_argument(
         "--output-dir",

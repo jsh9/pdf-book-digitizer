@@ -15,4 +15,5 @@ class DigitizerConfig:
     language_hint: str = ""
     unwrap_text: bool = True
     output_json: bool = False
-    llm_refix: bool = True
+    llm_fix: bool = True
+    llm_refix: bool = False

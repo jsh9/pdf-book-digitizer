@@ -27,10 +27,10 @@ The current pipeline therefore emits both `book.md` and `book.html` plus image a
 1. Render the PDF into one JPG per page.
 2. Send each page image to `glm-ocr` using Ollama's documented OCR task prompt:
    - `Text Recognition:`
-3. Run a second LLM pass with `qwen3.5:9b` to clean OCR line-end garbage such as trailing spaces or `\u001b[K`.
+3. Optionally run a second LLM pass with the model configured in `src/pdf_book_digitizer/text_fix.py` to clean OCR line-end garbage such as trailing spaces or `\u001b[K`.
 4. Save the raw OCR text and the fixed OCR text separately.
 5. Store a diff for raw versus fixed and print that diff to stdout.
-6. Check the files in `ocr/fixed/` for hard line breaks and re-fix flagged pages with `qwen3.5:9b` for 1 additional pass, saving a `-2` diff if needed.
+6. Optionally check the files in `ocr/fixed/` for hard line breaks and re-fix flagged pages with the same cleanup model for 1 additional pass, saving a `-2` diff if needed.
 7. Assemble all pages into `book.md` and `book.html`.
 
 By default, OCR text is unwrapped so that hard-wrapped line endings inside a paragraph are joined into spaces, and paragraph breaks are represented by a single newline.
@@ -68,8 +68,8 @@ pip install -e .
 
 This tool exposes five command-line endpoints:
 
-- `digitize-book`: render a PDF into page images, OCR the pages, run cleanup/refix passes, and assemble `book.md` plus `book.html`
-- `digitize-images`: OCR an existing folder of page images, run cleanup/refix passes, and assemble `book.md` plus `book.html`
+- `digitize-book`: render a PDF into page images, OCR the pages, run optional cleanup/refix passes, and assemble `book.md` plus `book.html`
+- `digitize-images`: OCR an existing folder of page images, run optional cleanup/refix passes, and assemble `book.md` plus `book.html`
 - `extract-pdf-pages`: only extract one JPG per PDF page, without OCR
 - `fix-raw-ocr-results`: run the cleanup/refix stage on existing `ocr/raw` page artifacts and rebuild `book.md` plus `book.html`
 - `inspect-ocr-pages`: open a local browser editor for page images and per-page OCR Markdown
@@ -109,12 +109,21 @@ digitize-book /path/to/book.pdf --no-unwrap-text
 digitize-images /path/to/page-images --no-unwrap-text
 ```
 
-Disable all LLM-based refixing passes:
+Disable the initial post-OCR LLM cleanup pass:
 
 ```bash
-digitize-book /path/to/book.pdf --no-llm-refix
-digitize-images /path/to/page-images --no-llm-refix
+digitize-book /path/to/book.pdf --no-llm-fix
+digitize-images /path/to/page-images --no-llm-fix
 ```
+
+Enable the later hard-line-break re-fix pass:
+
+```bash
+digitize-book /path/to/book.pdf --llm-refix
+digitize-images /path/to/page-images --llm-refix
+```
+
+The re-fix pass only runs when the initial LLM cleanup pass is also enabled.
 
 Write JSON per-page OCR files instead of Markdown:
 
@@ -202,7 +211,7 @@ The OCR cleanup pass uses the Ollama Python API directly and reads only `respons
 from ollama import chat
 
 response = chat(
-    model="qwen3.5:9b",
+    model="qwen3.5:27b",
     messages=[{"role": "user", "content": "<prompt with OCR text>"}],
 )
 print(response.message.content)
@@ -211,12 +220,12 @@ print(response.message.content)
 ## Notes on OCR quality
 
 - The current implementation uses `ollama run` directly because that is the path verified to work with `glm-ocr`.
-- After OCR, each page text is sent through `qwen3.5:9b` to remove line-end garbage from the OCR output.
+- After OCR, each page text is sent through the cleanup model in `src/pdf_book_digitizer/text_fix.py` by default. Use `--no-llm-fix` to bypass that initial pass.
 - The raw OCR text is written to `ocr/raw/` and the fixed text is written to `ocr/fixed/`, using Markdown by default or JSON with `--output-json`.
 - The raw-vs-fixed diff is written to `ocr/diff/` and also printed to stdout during processing.
-- Before assembling `book.html`, the pipeline checks `ocr/fixed/` for hard line breaks using a line-length heuristic and may send flagged pages through `qwen3.5:9b` 1 more time, producing a `-2` diff.
+- The hard-line-break re-fix pass is disabled by default. Use `--llm-refix` to enable the later heuristic-triggered pass, which may produce a `-2` diff.
+- If `--no-llm-fix` is set, no OCR text is sent to the cleanup LLM at all, so the later re-fix pass is also skipped even if `--llm-refix` is present.
 - After the cleanup passes, the pipeline assembles both `book.md` and `book.html` from the final page content.
-- Use `--no-llm-refix` to skip both the initial LLM cleanup pass and the later hard-line-break re-fix pass.
 - `digitize-images` is resumable: if a page already has matching raw, fixed, and diff artifacts, that page is skipped on the next run.
 - PDF page-image extraction is also resumable: if `pages/page-XXXX.jpg` already exists, that page image is skipped and a message is printed to stdout.
 - Text unwrapping is enabled by default. It converts single line breaks within a paragraph into spaces and converts paragraph breaks to single newlines.
