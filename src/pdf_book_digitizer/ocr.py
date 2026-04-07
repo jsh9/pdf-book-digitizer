@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 from pdf_book_digitizer.models import PageContent
 
 
-class OllamaOCRClient:
-    def __init__(self, model: str) -> None:
-        self.model = model
+DEESEEK_OCR_MODEL = "deepseek-ocr"
+DEESEEK_OCR_PROMPT = "<|grounding|>Convert the document to markdown."
 
-    def ocr_page(self, image_path: Path, page_number: int, language_hint: str = "") -> PageContent:
-        prompt = _build_text_prompt(language_hint)
-        body_text = self._run_task(image_path=image_path, prompt=prompt).strip()
+
+class OllamaOCRClient:
+    def ocr_page(self, image_path: Path, page_number: int) -> PageContent:
+        body_text = self._run_ocr(image_path=image_path).strip()
         return PageContent(
             page_number=page_number,
             body_markdown=body_text,
@@ -23,14 +23,14 @@ class OllamaOCRClient:
         )
 
     def describe_figures(self, image_path: Path) -> str:
-        return self._run_task(image_path=image_path, prompt="Figure Recognition:").strip()
+        return self._run_ocr(image_path=image_path).strip()
 
-    def _run_task(self, image_path: Path, prompt: str) -> str:
+    def _run_ocr(self, image_path: Path) -> str:
         command = [
             "ollama",
             "run",
-            self.model,
-            f"{prompt} {image_path}",
+            DEESEEK_OCR_MODEL,
+            _build_ocr_input(image_path),
         ]
         try:
             result = subprocess.run(
@@ -44,12 +44,10 @@ class OllamaOCRClient:
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.strip()
             raise RuntimeError(
-                f"`ollama run` failed for model {self.model!r} and image {str(image_path)!r}. {stderr}"
+                f"`ollama run` failed for model {DEESEEK_OCR_MODEL!r} and image {str(image_path)!r}. {stderr}"
             ) from exc
         return result.stdout.strip()
 
 
-def _build_text_prompt(language_hint: str) -> str:
-    if language_hint:
-        return f"Text Recognition ({language_hint}):"
-    return "Text Recognition:"
+def _build_ocr_input(image_path: Path) -> str:
+    return f"{image_path.resolve()}\n{DEESEEK_OCR_PROMPT}"

@@ -3,88 +3,85 @@ from __future__ import annotations
 from pathlib import Path
 
 from pdf_book_digitizer.assemble import read_page_markdown
+from pdf_book_digitizer.config import DigitizerConfig
 from pdf_book_digitizer.models import PageContent
-from pdf_book_digitizer.pipeline import run_ocr_from_images
+from pdf_book_digitizer.pipeline import run_ocr_from_images, run_pipeline
 
 
-def test_run_ocr_from_images_skips_initial_llm_fix_when_disabled(tmp_path: Path, monkeypatch) -> None:
+def test_run_ocr_from_images_writes_raw_markdown_output(tmp_path: Path, monkeypatch) -> None:
     output_dir = tmp_path / "output"
     image_path = tmp_path / "page-0001.jpg"
     image_path.write_text("", encoding="utf-8")
 
     class FakeOCRClient:
-        def __init__(self, model: str) -> None:
-            self.model = model
-
-        def ocr_page(self, page_image: Path, page_number: int, language_hint: str = "") -> PageContent:
+        def ocr_page(self, page_image: Path, page_number: int) -> PageContent:
             assert page_image == image_path
             assert page_number == 1
-            assert language_hint == ""
-            return PageContent(page_number=page_number, body_markdown="alpha\nbeta")
+            return PageContent(page_number=page_number, body_markdown="# Page 1\n\nalpha")
 
     monkeypatch.setattr("pdf_book_digitizer.pipeline.OllamaOCRClient", FakeOCRClient)
-
-    fix_calls: list[tuple[str, str]] = []
-
-    def fake_fix_ocr_text_with_LLM(text: str, model: str = "qwen3.5:27b") -> str:
-        fix_calls.append((text, model))
-        return "ALPHA BETA"
-
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.fix_ocr_text_with_LLM", fake_fix_ocr_text_with_LLM)
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.needs_hard_line_break_fix", lambda lines: False)
 
     run_ocr_from_images(
         image_paths=[image_path],
         output_dir=output_dir,
-        model="glm-ocr",
-        unwrap_text=False,
-        llm_fix=False,
-        llm_refix=False,
         preserve_input_names=False,
     )
 
-    assert fix_calls == []
     raw_page = read_page_markdown(output_dir / "ocr" / "raw" / "page-0001.md", page_number=1)
-    fixed_page = read_page_markdown(output_dir / "ocr" / "fixed" / "page-0001.md", page_number=1)
-    assert raw_page.body_markdown == "alpha\nbeta"
-    assert fixed_page.body_markdown == "alpha\nbeta"
+    assert raw_page.body_markdown == "# Page 1\n\nalpha"
 
 
-def test_run_ocr_from_images_skips_refix_when_initial_llm_fix_is_disabled(tmp_path: Path, monkeypatch) -> None:
+def test_run_ocr_from_images_skips_existing_raw_markdown(tmp_path: Path, monkeypatch, capsys) -> None:
     output_dir = tmp_path / "output"
-    image_path = tmp_path / "page-0001.jpg"
+    image_path = tmp_path / "001-cover.jpg"
     image_path.write_text("", encoding="utf-8")
 
-    class FakeOCRClient:
-        def __init__(self, model: str) -> None:
-            self.model = model
+    raw_output = output_dir / "ocr" / "raw" / "001-cover.md"
+    raw_output.parent.mkdir(parents=True, exist_ok=True)
+    raw_output.write_text("existing markdown\n", encoding="utf-8")
 
-        def ocr_page(self, page_image: Path, page_number: int, language_hint: str = "") -> PageContent:
-            return PageContent(page_number=page_number, body_markdown="alpha\nbeta")
+    class FakeOCRClient:
+        def __init__(self) -> None:
+            raise AssertionError("OCR client should not be constructed when all pages are already resumable")
 
     monkeypatch.setattr("pdf_book_digitizer.pipeline.OllamaOCRClient", FakeOCRClient)
-
-    fix_calls: list[tuple[str, str]] = []
-
-    def fake_fix_ocr_text_with_LLM(text: str, model: str = "qwen3.5:27b") -> str:
-        fix_calls.append((text, model))
-        return "ALPHA BETA"
-
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.fix_ocr_text_with_LLM", fake_fix_ocr_text_with_LLM)
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.needs_hard_line_break_fix", lambda lines: True)
 
     run_ocr_from_images(
         image_paths=[image_path],
         output_dir=output_dir,
-        model="glm-ocr",
-        unwrap_text=False,
-        llm_fix=False,
-        llm_refix=True,
-        preserve_input_names=False,
+        preserve_input_names=True,
     )
 
-    assert fix_calls == []
-    fixed_page = read_page_markdown(output_dir / "ocr" / "fixed" / "page-0001.md", page_number=1)
-    assert fixed_page.body_markdown == "alpha\nbeta"
-    assert (output_dir / "ocr" / "diff" / "page-0001.diff").exists()
-    assert not (output_dir / "ocr" / "diff" / "page-0001-2.diff").exists()
+    assert raw_output.read_text(encoding="utf-8") == "existing markdown\n"
+    assert "Skipping 001-cover; found existing raw output" in capsys.readouterr().out
+
+
+def test_run_pipeline_renders_pdf_pages_before_ocr(tmp_path: Path, monkeypatch) -> None:
+    input_pdf = tmp_path / "book.pdf"
+    input_pdf.write_text("", encoding="utf-8")
+    output_dir = tmp_path / "output"
+    rendered_paths = [tmp_path / "rendered" / "page-0001.jpg"]
+    calls: list[tuple[str, object]] = []
+
+    def fake_render_pdf_to_jpgs(input_path: Path, pages_dir: Path, dpi: int) -> list[Path]:
+        calls.append(("render", input_path, pages_dir, dpi))
+        return rendered_paths
+
+    def fake_run_ocr_from_images(image_paths: list[Path], output_dir: Path, preserve_input_names: bool = True) -> None:
+        calls.append(("ocr", image_paths, output_dir, preserve_input_names))
+
+    monkeypatch.setattr("pdf_book_digitizer.pipeline.render_pdf_to_jpgs", fake_render_pdf_to_jpgs)
+    monkeypatch.setattr("pdf_book_digitizer.pipeline.run_ocr_from_images", fake_run_ocr_from_images)
+
+    run_pipeline(
+        DigitizerConfig(
+            input_pdf=input_pdf,
+            output_dir=output_dir,
+            dpi=450,
+        )
+    )
+
+    assert calls == [
+        ("render", input_pdf, output_dir / "pages", 450),
+        ("ocr", rendered_paths, output_dir, False),
+    ]

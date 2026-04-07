@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pdf-book-digitizer"
 version = "0.1.1"
-description = "Digitize scanned PDF books into OCR text, extracted images, and Calibre-friendly HTML."
+description = "Render PDF pages and OCR page images into per-page Markdown."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -23,7 +23,6 @@ dev = [
 digitize-book = "pdf_book_digitizer.cli:main"
 digitize-images = "pdf_book_digitizer.cli_images:main"
 extract-pdf-pages = "pdf_book_digitizer.cli_extract_pages:main"
-fix-raw-ocr-results = "pdf_book_digitizer.cli_fix_raw_ocr_results:main"
 inspect-ocr-pages = "pdf_book_digitizer.manual_editor:main"
 
 [tool.setuptools]
