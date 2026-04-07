@@ -3,9 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pdf_book_digitizer.assemble import read_page_markdown
-from pdf_book_digitizer.config import DigitizerConfig
+from pdf_book_digitizer.cli import digitize_book, run_ocr_from_images
 from pdf_book_digitizer.models import PageContent
-from pdf_book_digitizer.pipeline import run_ocr_from_images, run_pipeline
 
 
 def test_run_ocr_from_images_writes_raw_markdown_output(tmp_path: Path, monkeypatch) -> None:
@@ -19,7 +18,7 @@ def test_run_ocr_from_images_writes_raw_markdown_output(tmp_path: Path, monkeypa
             assert page_number == 1
             return PageContent(page_number=page_number, body_markdown="# Page 1\n\nalpha")
 
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.OllamaOCRClient", FakeOCRClient)
+    monkeypatch.setattr("pdf_book_digitizer.cli.OllamaOCRClient", FakeOCRClient)
 
     run_ocr_from_images(
         image_paths=[image_path],
@@ -44,7 +43,7 @@ def test_run_ocr_from_images_skips_existing_raw_markdown(tmp_path: Path, monkeyp
         def __init__(self) -> None:
             raise AssertionError("OCR client should not be constructed when all pages are already resumable")
 
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.OllamaOCRClient", FakeOCRClient)
+    monkeypatch.setattr("pdf_book_digitizer.cli.OllamaOCRClient", FakeOCRClient)
 
     run_ocr_from_images(
         image_paths=[image_path],
@@ -56,7 +55,7 @@ def test_run_ocr_from_images_skips_existing_raw_markdown(tmp_path: Path, monkeyp
     assert "Skipping 001-cover; found existing raw output" in capsys.readouterr().out
 
 
-def test_run_pipeline_renders_pdf_pages_before_ocr(tmp_path: Path, monkeypatch) -> None:
+def test_digitize_book_renders_pdf_pages_before_ocr(tmp_path: Path, monkeypatch) -> None:
     input_pdf = tmp_path / "book.pdf"
     input_pdf.write_text("", encoding="utf-8")
     output_dir = tmp_path / "output"
@@ -70,15 +69,13 @@ def test_run_pipeline_renders_pdf_pages_before_ocr(tmp_path: Path, monkeypatch) 
     def fake_run_ocr_from_images(image_paths: list[Path], output_dir: Path, preserve_input_names: bool = True) -> None:
         calls.append(("ocr", image_paths, output_dir, preserve_input_names))
 
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.render_pdf_to_jpgs", fake_render_pdf_to_jpgs)
-    monkeypatch.setattr("pdf_book_digitizer.pipeline.run_ocr_from_images", fake_run_ocr_from_images)
+    monkeypatch.setattr("pdf_book_digitizer.cli.render_pdf_to_jpgs", fake_render_pdf_to_jpgs)
+    monkeypatch.setattr("pdf_book_digitizer.cli.run_ocr_from_images", fake_run_ocr_from_images)
 
-    run_pipeline(
-        DigitizerConfig(
-            input_pdf=input_pdf,
-            output_dir=output_dir,
-            dpi=450,
-        )
+    digitize_book(
+        input_pdf=input_pdf,
+        output_dir=output_dir,
+        dpi=450,
     )
 
     assert calls == [

@@ -20,9 +20,9 @@ dev = [
 
 [project.scripts]
 digitize-book = "pdf_book_digitizer.cli:main"
-digitize-images = "pdf_book_digitizer.cli_images:main"
-extract-pdf-pages = "pdf_book_digitizer.cli_extract_pages:main"
-inspect-ocr-pages = "pdf_book_digitizer.manual_editor:main"
+digitize-images = "pdf_book_digitizer.cli:digitize_images_main"
+extract-pdf-pages = "pdf_book_digitizer.cli:extract_pdf_pages_main"
+inspect-ocr-pages = "pdf_book_digitizer.cli:inspect_ocr_pages_main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
