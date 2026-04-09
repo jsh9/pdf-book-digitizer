@@ -7,8 +7,7 @@ from pdf_book_digitizer.assemble import read_page_markdown, write_page_markdown
 from pdf_book_digitizer.image_inputs import collect_image_paths, infer_page_number_from_image_path
 from pdf_book_digitizer.manual_editor import main as manual_editor_main
 from pdf_book_digitizer.models import PageContent
-from pdf_book_digitizer.ocr import OllamaOCRClient
-from pdf_book_digitizer.pdf_render import render_pdf_to_jpgs
+from pdf_book_digitizer.ocr import OCRTimeoutError, OCR_TIMEOUT_SECONDS, OllamaOCRClient
 
 
 def main() -> None:
@@ -73,7 +72,14 @@ def run_ocr_from_images(
 
         if client is None:
             client = OllamaOCRClient()
-        page = client.ocr_page(page_image, page_number=page_number)
+        try:
+            page = client.ocr_page(page_image, page_number=page_number)
+        except OCRTimeoutError:
+            print(f"Skipping {output_stem}; OCR exceeded {OCR_TIMEOUT_SECONDS} seconds")
+            page = PageContent(page_number=page_number, body_markdown="")
+            write_page_output(page, raw_output_path)
+            print(f"Wrote empty OCR markdown for {output_stem}")
+            continue
         write_page_output(page, raw_output_path)
         print(f"Wrote raw OCR markdown for {output_stem}")
 
@@ -135,6 +141,12 @@ def write_page_output(page: PageContent, output_path: Path) -> None:
 
 def read_page_output(input_path: Path, page_number: int) -> PageContent:
     return read_page_markdown(input_path, page_number)
+
+
+def render_pdf_to_jpgs(input_pdf: Path, output_dir: Path, dpi: int) -> list[Path]:
+    from pdf_book_digitizer.pdf_render import render_pdf_to_jpgs as render_pdf_pages
+
+    return render_pdf_pages(input_pdf, output_dir, dpi)
 
 
 if __name__ == "__main__":

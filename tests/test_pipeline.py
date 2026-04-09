@@ -5,6 +5,7 @@ from pathlib import Path
 from pdf_book_digitizer.assemble import read_page_markdown
 from pdf_book_digitizer.cli import digitize_book, run_ocr_from_images
 from pdf_book_digitizer.models import PageContent
+from pdf_book_digitizer.ocr import OCRTimeoutError
 
 
 def test_run_ocr_from_images_writes_raw_markdown_output(tmp_path: Path, monkeypatch) -> None:
@@ -53,6 +54,29 @@ def test_run_ocr_from_images_skips_existing_raw_markdown(tmp_path: Path, monkeyp
 
     assert raw_output.read_text(encoding="utf-8") == "existing markdown\n"
     assert "Skipping 001-cover; found existing raw output" in capsys.readouterr().out
+
+
+def test_run_ocr_from_images_writes_empty_markdown_after_timeout(tmp_path: Path, monkeypatch, capsys) -> None:
+    output_dir = tmp_path / "output"
+    image_path = tmp_path / "page-0001.jpg"
+    image_path.write_text("", encoding="utf-8")
+
+    class FakeOCRClient:
+        def ocr_page(self, page_image: Path, page_number: int) -> PageContent:
+            raise OCRTimeoutError("timed out")
+
+    monkeypatch.setattr("pdf_book_digitizer.cli.OllamaOCRClient", FakeOCRClient)
+
+    run_ocr_from_images(
+        image_paths=[image_path],
+        output_dir=output_dir,
+        preserve_input_names=False,
+    )
+
+    raw_output = output_dir / "ocr" / "raw" / "page-0001.md"
+    assert raw_output.exists()
+    assert raw_output.read_text(encoding="utf-8") == "\n"
+    assert "Skipping page-0001; OCR exceeded 120 seconds" in capsys.readouterr().out
 
 
 def test_digitize_book_renders_pdf_pages_before_ocr(tmp_path: Path, monkeypatch) -> None:

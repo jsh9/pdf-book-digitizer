@@ -8,6 +8,11 @@ from pdf_book_digitizer.models import PageContent
 
 DEESEEK_OCR_MODEL = "deepseek-ocr"
 DEESEEK_OCR_PROMPT = "<|grounding|>Convert the document to markdown."
+OCR_TIMEOUT_SECONDS = 120
+
+
+class OCRTimeoutError(RuntimeError):
+    pass
 
 
 class OllamaOCRClient:
@@ -28,9 +33,14 @@ class OllamaOCRClient:
                 check=True,
                 capture_output=True,
                 text=True,
+                timeout=OCR_TIMEOUT_SECONDS,
             )
         except FileNotFoundError as exc:
             raise RuntimeError("`ollama` is not installed or not available on PATH.") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise OCRTimeoutError(
+                f"`ollama run` timed out after {OCR_TIMEOUT_SECONDS} seconds for image {str(image_path)!r}."
+            ) from exc
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.strip()
             raise RuntimeError(
