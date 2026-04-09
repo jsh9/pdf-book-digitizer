@@ -8,6 +8,7 @@ from pdf_book_digitizer.image_inputs import collect_image_paths, infer_page_numb
 from pdf_book_digitizer.manual_editor import main as manual_editor_main
 from pdf_book_digitizer.models import PageContent
 from pdf_book_digitizer.ocr import OCRTimeoutError, OCR_TIMEOUT_SECONDS, OllamaOCRClient
+from pdf_book_digitizer.postprocess import contains_footnote_marker, postprocess_page
 
 
 def main() -> None:
@@ -57,31 +58,49 @@ def run_ocr_from_images(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_dir = output_dir / "ocr" / "raw"
+    new_dir = output_dir / "ocr" / "new"
+    figures_dir = output_dir / "ocr" / "figures"
     raw_dir.mkdir(parents=True, exist_ok=True)
+    new_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
     client: OllamaOCRClient | None = None
 
     for index, page_image in enumerate(image_paths, start=1):
         output_stem = page_image.stem if preserve_input_names else f"page-{index:04d}"
         page_number = infer_page_number_from_image_path(page_image, index) if preserve_input_names else index
         raw_output_path = build_output_path(raw_dir, output_stem)
+        new_output_path = build_output_path(new_dir, output_stem)
 
         if preserve_input_names and raw_output_path.exists():
             print(f"Skipping {output_stem}; found existing raw output")
-            read_page_output(raw_output_path, page_number)
-            continue
+            page = read_page_output(raw_output_path, page_number)
+        else:
+            if client is None:
+                client = OllamaOCRClient()
+            try:
+                page = client.ocr_page(page_image, page_number=page_number)
+            except OCRTimeoutError:
+                print(f"Skipping {output_stem}; OCR exceeded {OCR_TIMEOUT_SECONDS} seconds")
+                page = PageContent(page_number=page_number, body_markdown="")
+                write_page_output(page, raw_output_path)
+                print(f"Wrote empty OCR markdown for {output_stem}")
+            else:
+                write_page_output(page, raw_output_path)
+                print(f"Wrote raw OCR markdown for {output_stem}")
 
-        if client is None:
+        if client is None and contains_footnote_marker(page.body_markdown):
             client = OllamaOCRClient()
-        try:
-            page = client.ocr_page(page_image, page_number=page_number)
-        except OCRTimeoutError:
-            print(f"Skipping {output_stem}; OCR exceeded {OCR_TIMEOUT_SECONDS} seconds")
-            page = PageContent(page_number=page_number, body_markdown="")
-            write_page_output(page, raw_output_path)
-            print(f"Wrote empty OCR markdown for {output_stem}")
-            continue
-        write_page_output(page, raw_output_path)
-        print(f"Wrote raw OCR markdown for {output_stem}")
+
+        processed_page = postprocess_page(
+            raw_markdown=page.body_markdown,
+            page_image_path=page_image,
+            output_stem=output_stem,
+            figures_dir=figures_dir,
+            figure_href_prefix="../figures/",
+            ocr_client=client,
+        )
+        write_page_output(PageContent(page_number=page_number, body_markdown=processed_page.markdown), new_output_path)
+        print(f"Wrote post-processed markdown for {output_stem}")
 
 
 def build_digitize_book_parser() -> argparse.ArgumentParser:

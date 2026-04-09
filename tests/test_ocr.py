@@ -3,7 +3,14 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from pdf_book_digitizer.ocr import DEESEEK_OCR_MODEL, DEESEEK_OCR_PROMPT, OCR_TIMEOUT_SECONDS, OCRTimeoutError, OllamaOCRClient
+from pdf_book_digitizer.ocr import (
+    DEESEEK_OCR_MODEL,
+    DEESEEK_OCR_PROMPT,
+    FREE_OCR_PROMPT,
+    OCR_TIMEOUT_SECONDS,
+    OCRTimeoutError,
+    OllamaOCRClient,
+)
 
 
 def test_ocr_client_uses_deepseek_markdown_prompt(tmp_path: Path, monkeypatch) -> None:
@@ -41,6 +48,34 @@ def test_ocr_client_uses_deepseek_markdown_prompt(tmp_path: Path, monkeypatch) -
             "run",
             DEESEEK_OCR_MODEL,
             f"{image_path.resolve()}\n{DEESEEK_OCR_PROMPT}",
+        ]
+    ]
+
+
+def test_free_ocr_uses_free_ocr_prompt(tmp_path: Path, monkeypatch) -> None:
+    image_path = tmp_path / "page-0001.jpg"
+    image_path.write_text("", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    class FakeCompletedProcess:
+        def __init__(self) -> None:
+            self.stdout = "① footnote text\n"
+
+    def fake_subprocess_run(command, check, capture_output, text, timeout):
+        calls.append(command)
+        return FakeCompletedProcess()
+
+    monkeypatch.setattr("pdf_book_digitizer.ocr.subprocess.run", fake_subprocess_run)
+
+    free_ocr_text = OllamaOCRClient().free_ocr_page_text(image_path)
+
+    assert free_ocr_text == "① footnote text"
+    assert calls == [
+        [
+            "ollama",
+            "run",
+            DEESEEK_OCR_MODEL,
+            f"{image_path.resolve()}\n{FREE_OCR_PROMPT}",
         ]
     ]
 

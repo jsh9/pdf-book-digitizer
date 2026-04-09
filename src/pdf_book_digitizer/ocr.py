@@ -8,6 +8,7 @@ from pdf_book_digitizer.models import PageContent
 
 DEESEEK_OCR_MODEL = "deepseek-ocr"
 DEESEEK_OCR_PROMPT = "<|grounding|>Convert the document to markdown."
+FREE_OCR_PROMPT = "Free OCR."
 OCR_TIMEOUT_SECONDS = 120
 
 
@@ -17,15 +18,18 @@ class OCRTimeoutError(RuntimeError):
 
 class OllamaOCRClient:
     def ocr_page(self, image_path: Path, page_number: int) -> PageContent:
-        body_text = self._run_ocr(image_path=image_path).strip()
+        body_text = self._run_ocr(image_path=image_path, prompt=DEESEEK_OCR_PROMPT).strip()
         return PageContent(page_number=page_number, body_markdown=body_text)
 
-    def _run_ocr(self, image_path: Path) -> str:
+    def free_ocr_page_text(self, image_path: Path) -> str:
+        return self._run_ocr(image_path=image_path, prompt=FREE_OCR_PROMPT).strip()
+
+    def _run_ocr(self, image_path: Path, prompt: str) -> str:
         command = [
             "ollama",
             "run",
             DEESEEK_OCR_MODEL,
-            _build_ocr_input(image_path),
+            _build_ocr_input(image_path, prompt),
         ]
         try:
             result = subprocess.run(
@@ -49,5 +53,5 @@ class OllamaOCRClient:
         return result.stdout.strip()
 
 
-def _build_ocr_input(image_path: Path) -> str:
-    return f"{image_path.resolve()}\n{DEESEEK_OCR_PROMPT}"
+def _build_ocr_input(image_path: Path, prompt: str) -> str:
+    return f"{image_path.resolve()}\n{prompt}"

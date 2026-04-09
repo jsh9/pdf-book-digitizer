@@ -28,7 +28,9 @@ def test_run_ocr_from_images_writes_raw_markdown_output(tmp_path: Path, monkeypa
     )
 
     raw_page = read_page_markdown(output_dir / "ocr" / "raw" / "page-0001.md", page_number=1)
+    new_page = read_page_markdown(output_dir / "ocr" / "new" / "page-0001.md", page_number=1)
     assert raw_page.body_markdown == "# Page 1\n\nalpha"
+    assert new_page.body_markdown == "# Page 1\n\nalpha"
 
 
 def test_run_ocr_from_images_skips_existing_raw_markdown(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -53,6 +55,7 @@ def test_run_ocr_from_images_skips_existing_raw_markdown(tmp_path: Path, monkeyp
     )
 
     assert raw_output.read_text(encoding="utf-8") == "existing markdown\n"
+    assert (output_dir / "ocr" / "new" / "001-cover.md").read_text(encoding="utf-8") == "existing markdown\n"
     assert "Skipping 001-cover; found existing raw output" in capsys.readouterr().out
 
 
@@ -74,8 +77,11 @@ def test_run_ocr_from_images_writes_empty_markdown_after_timeout(tmp_path: Path,
     )
 
     raw_output = output_dir / "ocr" / "raw" / "page-0001.md"
+    new_output = output_dir / "ocr" / "new" / "page-0001.md"
     assert raw_output.exists()
+    assert new_output.exists()
     assert raw_output.read_text(encoding="utf-8") == "\n"
+    assert new_output.read_text(encoding="utf-8") == "\n"
     assert "Skipping page-0001; OCR exceeded 120 seconds" in capsys.readouterr().out
 
 

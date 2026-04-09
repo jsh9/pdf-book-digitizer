@@ -7,7 +7,9 @@ Maintainer notes for `pdf-book-digitizer`.
 This project digitizes scanned or poorly OCRed books into:
 
 - page JPGs
-- per-page OCR Markdown files
+- per-page raw OCR Markdown files
+- per-page post-processed Markdown files
+- extracted figure crops
 
 Primary user flows:
 
@@ -22,6 +24,10 @@ Typical output tree:
 ```text
 output/
   ocr/
+    figures/
+      page-0001-fig-001.jpg
+    new/
+      page-0001.md
     raw/
       page-0001.md
   pages/
@@ -30,7 +36,9 @@ output/
 
 Per-page OCR artifacts:
 
-- `ocr/raw/`: final OCR Markdown returned by DeepSeek OCR
+- `ocr/raw/`: raw OCR Markdown returned by DeepSeek OCR
+- `ocr/new/`: post-processed Markdown derived from `ocr/raw/`
+- `ocr/figures/`: cropped figures extracted from OCR image regions
 
 ## OCR Pipeline
 
@@ -46,8 +54,12 @@ OCR:
 ```
 
 - OCR output is treated as final Markdown
-- there is no cleanup pass
-- there is no hard-line-break refix pass
+- post-processing then:
+  - reconstructs paragraphs from terminal/control garbage such as `\x1b[K`
+  - removes OCR region tags from pure text blocks
+  - normalizes subtitle headings
+  - crops image regions into `ocr/figures/`
+  - reruns `Free OCR.` when circled footnote markers are detected and appends Markdown footnotes
 - there is no JSON OCR output
 - there are no combined `book.md` or `book.html` outputs
 
@@ -62,6 +74,7 @@ A page is skipped if this already exists for the image stem:
 When skipped:
 
 - a stdout skip message is printed
+- post-processing still runs from the stored raw Markdown so `ocr/new/` and `ocr/figures/` stay in sync
 
 PDF page extraction is also resumable:
 
@@ -82,12 +95,11 @@ Current validated checks used in this repo:
 
 ```bash
 python3 -m compileall src tests
-pytest -q tests/test_pipeline.py tests/test_ocr.py tests/test_manual_editor.py
+pytest -q tests/test_pipeline.py tests/test_ocr.py tests/test_postprocess.py tests/test_manual_editor.py
 ```
 
 ## Known Constraints
 
-- figure/image extraction inside OCR pages is not implemented
 - running headers, footers, and printed page numbers are not reliably separated by OCR yet
 - the manual inspection editor remains available for reviewing Markdown page files
 
